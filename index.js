@@ -17,6 +17,7 @@ const braavaAccessory = function (log, config) {
     this.firmware = "N/A";
     this.keepAliveEnabled = config.keepAliveEnabled;
     this.autoRefreshEnabled = config.autoRefreshEnabled;
+    this.showDockAsContactSensor = config.dockContactSensor == undefined ? true : config.dockContactSensor;
     this.cacheTTL = config.cacheTTL || 5;
     this.disableWait = config.disableWait;
     this.braava = null;
@@ -27,6 +28,9 @@ const braavaAccessory = function (log, config) {
     this.batteryService = new Service.BatteryService(`${this.name} Battery`);
     this.padService = new Service.ContactSensor(`${this.name} Pad`);
     this.tankService = new Service.FilterMaintenance(`${this.name} Tank`);
+    if (this.showDockAsContactSensor) {
+        this.dockService = new Service.ContactSensor(`${this.name} Docked`, "docked");
+    }
     if (typeof this.orderedClean !== 'undefined') {
         this.roomService = new Service.Switch(`${this.name} Clean Rooms`, 'rooms');
     }
@@ -269,6 +273,18 @@ braavaAccessory.prototype = {
         });
     },
 
+    getDockedState(callback) {
+        this.log("Docked status requested");
+
+        this.getStatus((error, status) => {
+            if (error) {
+                callback(error);
+            } else {
+                callback(null, !status.charging);
+            }
+        });
+    },
+
     identify(callback) {
         this.log("Identify requested. Not supported yet.");
 
@@ -394,16 +410,21 @@ braavaAccessory.prototype = {
     },
 
     getServices() {
+        const services = [];
         this.accessoryInfo.setCharacteristic(Characteristic.Manufacturer, "iRobot");
         this.accessoryInfo.setCharacteristic(Characteristic.SerialNumber, "See iRobot App");
         this.accessoryInfo.setCharacteristic(Characteristic.Identify, false);
         this.accessoryInfo.setCharacteristic(Characteristic.Name, this.name);
         this.accessoryInfo.setCharacteristic(Characteristic.Model, this.model);
         this.accessoryInfo.setCharacteristic(Characteristic.FirmwareRevision, this.firmware);
+        services.push(this.accessoryInfo);
+
         this.switchService
             .getCharacteristic(Characteristic.On)
             .on("set", this.setState.bind(this))
             .on("get", this.getRunningStatus.bind(this));
+        services.push(this.switchService);
+        
         this.batteryService
             .getCharacteristic(Characteristic.BatteryLevel)
             .on("get", this.getBatteryLevel.bind(this));
@@ -413,22 +434,36 @@ braavaAccessory.prototype = {
         this.batteryService
             .getCharacteristic(Characteristic.StatusLowBattery)
             .on("get", this.getLowBatteryStatus.bind(this));
+        services.push(this.batteryService);
+
         this.tankService
             .getCharacteristic(Characteristic.FilterLifeLevel)
             .on("get", this.getTankLevel.bind(this));
         this.tankService
             .getCharacteristic(Characteristic.FilterChangeIndication)
             .on("get", this.getTankState.bind(this));
+        services.push(this.tankService);
+
         this.padService
             .getCharacteristic(Characteristic.ContactSensorState)
             .on("get", this.getPadState.bind(this));
+        services.push(this.padService);
+
+        if (this.showDockAsContactSensor) {
+            this.dockService
+                .getCharacteristic(Characteristic.ContactSensorState)
+                .on("get", this.getDockedState.bind(this));
+            services.push(this.dockService);
+        }
+
         if (typeof this.orderedClean !== 'undefined') {
             this.roomService
                 .getCharacteristic(Characteristic.On)
                 .on("set", this.cleanRooms.bind(this))
                 .on("get", this.getRunningStatus.bind(this));
+            services.push(this.roomService);
         }
-        return [this.accessoryInfo, this.switchService, typeof this.orderedClean !== 'undefined' && this.roomService, this.batteryService, this.tankService, this.padService];
+        return services;
     },
 
     registerStateUpdate() {
@@ -473,6 +508,11 @@ braavaAccessory.prototype = {
         this.padService
             .getCharacteristic(Characteristic.ContactSensorState)
             .updateValue(status.padDetected);
+        if (this.showDockAsContactSensor) {
+            this.dockService
+                .getCharacteristic(Characteristic.ContactSensorState)
+                .updateValue(!status.charging);
+        }
         if (typeof this.orderedClean !== 'undefined') {
             this.roomService
                 .getCharacteristic(Characteristic.On)
