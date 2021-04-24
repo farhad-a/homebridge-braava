@@ -39,6 +39,11 @@
             "title": "Enable Keep Alive",
             "required": false
         },
+        "runningContactSensor": {
+            "type": "boolean",
+            "title": "Show running status as a contact sensor",
+            "required": false
+        },
         "cacheTTL": {
             "type": "number",
             "title": "TTL Cache",

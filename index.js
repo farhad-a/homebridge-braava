@@ -27,6 +27,9 @@ const braavaAccessory = function (log, config) {
     this.batteryService = new Service.BatteryService(`${this.name} Battery`);
     this.padService = new Service.ContactSensor(`${this.name} Pad`);
     this.tankService = new Service.FilterMaintenance(`${this.name} Tank`);
+    if (this.showRunningAsContactSensor) {
+        this.runningService = new Service.ContactSensor(`${this.name} Running`, "running");
+    }
     if (typeof this.orderedClean !== 'undefined') {
         this.roomService = new Service.Switch(`${this.name} Clean Rooms`, 'rooms');
     }
@@ -422,13 +425,18 @@ braavaAccessory.prototype = {
         this.padService
             .getCharacteristic(Characteristic.ContactSensorState)
             .on("get", this.getPadState.bind(this));
+        if (this.showRunningAsContactSensor) {
+            this.runningService
+                .getCharacteristic(Characteristic.ContactSensorState)
+                .on("get", this.getRunningStatus.bind(this));
+        }
         if (typeof this.orderedClean !== 'undefined') {
             this.roomService
                 .getCharacteristic(Characteristic.On)
                 .on("set", this.cleanRooms.bind(this))
                 .on("get", this.getRunningStatus.bind(this));
         }
-        return [this.accessoryInfo, this.switchService, typeof this.orderedClean !== 'undefined' && this.roomService, this.batteryService, this.tankService, this.padService];
+        return [this.accessoryInfo, this.switchService, typeof this.orderedClean !== 'undefined' && this.roomService, this.batteryService, this.tankService, this.padService, this.showRunningAsContactSensor && this.runningService];
     },
 
     registerStateUpdate() {
@@ -473,6 +481,11 @@ braavaAccessory.prototype = {
         this.padService
             .getCharacteristic(Characteristic.ContactSensorState)
             .updateValue(status.padDetected);
+        if (this.showRunningAsContactSensor) {
+            this.runningService
+                .getCharacteristic(Characteristic.ContactSensorState)
+                .updateValue(status.running);
+        }
         if (typeof this.orderedClean !== 'undefined') {
             this.roomService
                 .getCharacteristic(Characteristic.On)
